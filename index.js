@@ -11,16 +11,16 @@
  * @license MIT
  */
 
-const request = require('request');
-const iconv = require('iconv-lite');
-const cheerio = require('cheerio');
+const axios = require("axios");
+const iconv = require("iconv-lite");
+const cheerio = require("cheerio");
 
 // URL is not defined in old node.js
-if (typeof URL === 'undefined') {
-  URL = require('url').URL;
+if (typeof URL === "undefined") {
+  URL = require("url").URL;
 }
 
-const HOST = 'http://컴시간학생.kr';
+const HOST = "http://컴시간학생.kr";
 
 class Timetable {
   constructor() {
@@ -31,7 +31,7 @@ class Timetable {
     this._cache = null;
     this._cacheAt = null;
     this._schoolCode = -1;
-    this._weekdayString = ['일', '월', '화', '수', '목', '금', '토'];
+    this._weekdayString = ["일", "월", "화", "수", "목", "금", "토"];
     this._option = {
       maxGrade: 3,
       cache: 0,
@@ -48,81 +48,66 @@ class Timetable {
       this._option = Object.assign(this._option, option);
     }
 
-    await new Promise((resolve, reject) => {
-      request(HOST, (err, _res, body) => {
-        if (err) {
-          reject(err);
-        }
+    const mainPageResponse = await axios.get(HOST);
+    const body = mainPageResponse.data;
 
-        const frame = body
-          .toLowerCase()
-          .replace(/\'/g, '"')
-          .match(/<frame [^>]*src="[^"]*"[^>]*>/gm);
-        if (!frame) {
-          reject(new Error('frame을 찾을 수 없습니다'));
-          return;
-        }
+    const frame = body
+      .toLowerCase()
+      .replace(/\'/g, '"')
+      .match(/<frame [^>]*src="[^"]*"[^>]*>/gm);
+    if (!frame) {
+      throw new Error("frame을 찾을 수 없습니다");
+    }
 
-        const uri = frame[0].match(/\".*\"/gi);
-        if (!uri) {
-          reject(new Error('접근 주소를 찾을 수 없습니다'));
-          return;
-        }
+    const uri = frame[0].match(/\".*\"/gi);
+    if (!uri) {
+      throw new Error("접근 주소를 찾을 수 없습니다");
+    }
 
-        const frameHref = uri[0].replace(/\"/g, '');
-        const url = new URL(frameHref);
-        this._url = frameHref;
-        this._baseUrl = url.origin;
-        resolve();
-      });
+    const frameHref = uri[0].replace(/\"/g, "");
+    const url = new URL(frameHref);
+    this._url = frameHref;
+    this._baseUrl = url.origin;
+
+    const frameResponse = await axios.get(frameHref, {
+      responseType: "arraybuffer",
+      transformResponse: [(data) => iconv.decode(data, "EUC-KR")],
     });
+    const source = frameResponse.data;
 
-    await new Promise((resolve, reject) => {
-      request(
-        {
-          url: this._url,
-          encoding: null,
-        },
-        (err, _res, body) => {
-          if (err) {
-            reject(err);
-          }
+    const idx = source.indexOf("school_ra(sc)");
+    const idx2 = source.indexOf("sc_data('");
 
-          const source = iconv.decode(body, 'EUC-KR');
-          const idx = source.indexOf('school_ra(sc)');
-          const idx2 = source.indexOf("sc_data('");
+    if (idx === -1 || idx2 === -1) {
+      throw new Error("소스에서 식별 코드를 찾을 수 없습니다.");
+      return;
+    }
 
-          if (idx === -1 || idx2 === -1) {
-            reject(new Error('소스에서 식별 코드를 찾을 수 없습니다.'));
-            return;
-          }
+    const extractSchoolRa = source.substr(idx, 50).replace(" ", "");
+    const schoolRa = extractSchoolRa.match(/url:'.(.*?)'/);
 
-          const extractSchoolRa = source.substr(idx, 50).replace(' ', '');
-          const schoolRa = extractSchoolRa.match(/url:'.(.*?)'/);
+    // sc_data 인자값 추출
+    const extractScData = source.substr(idx2, 30).replace(" ", "");
+    const scData = extractScData.match(/\(.*?\)/);
 
-          // sc_data 인자값 추출
-          const extractScData = source.substr(idx2, 30).replace(' ', '');
-          const scData = extractScData.match(/\(.*?\)/);
+    if (scData) {
+      this._scData = scData[0]
+        .replace(/[()]/g, "")
+        .replace(/'/g, "")
+        .split(",");
+    } else {
+      throw new Error("sc_data 값을 찾을 수 없습니다.");
+      return;
+    }
 
-          if (scData) {
-            this._scData = scData[0].replace(/[()]/g, '').replace(/'/g, '').split(',');
-          } else {
-            reject(new Error('sc_data 값을 찾을 수 없습니다.'));
-            return;
-          }
+    if (schoolRa) {
+      this._extractCode = schoolRa[1];
+    } else {
+      throw new Error("school_ra 값을 찾을 수 없습니다.");
+      return;
+    }
 
-          if (schoolRa) {
-            this._extractCode = schoolRa[1];
-          } else {
-            reject(new Error('school_ra 값을 찾을 수 없습니다.'));
-            return;
-          }
-
-          this._pageSource = source;
-          resolve();
-        },
-      );
-    });
+    this._pageSource = source;
     this._initialized = true;
   }
 
@@ -134,39 +119,34 @@ class Timetable {
    */
   search(keyword) {
     if (!this._initialized) {
-      throw new Error('초기화가 진행되지 않았습니다.');
+      throw new Error("초기화가 진행되지 않았습니다.");
     }
 
-    let hexString = '';
-    for (let buf of iconv.encode(keyword, 'euc-kr')) {
-      hexString += '%' + buf.toString(16);
+    let hexString = "";
+    for (let buf of iconv.encode(keyword, "euc-kr")) {
+      hexString += "%" + buf.toString(16);
     }
 
-    return new Promise((resolve, reject) => {
-      request(this._baseUrl + this._extractCode + hexString, (err, _res, body) => {
-        let jsonString = body.substr(0, body.lastIndexOf('}') + 1);
-        let searchData = JSON.parse(jsonString)['학교검색'];
-
-        if (err) {
-          reject(err);
-        }
+    return axios
+      .get(this._baseUrl + this._extractCode + hexString)
+      .then((response) => {
+        const body = response.data;
+        let jsonString = body.substr(0, body.lastIndexOf("}") + 1);
+        let searchData = JSON.parse(jsonString)["학교검색"];
 
         if (searchData.length <= 0) {
-          reject(new Error('검색된 학교가 없습니다.'));
+          throw new Error("검색된 학교가 없습니다.");
         }
 
-        resolve(
-          searchData.map((data) => {
-            return {
-              _: data[0],
-              region: data[1],
-              name: data[2],
-              code: data[3],
-            };
-          }),
-        );
+        return searchData.map((data) => {
+          return {
+            _: data[0],
+            region: data[1],
+            name: data[2],
+            code: data[3],
+          };
+        });
       });
-    });
   }
 
   /**
@@ -196,10 +176,10 @@ class Timetable {
     const jsonString = await this._getData();
     const resultJson = JSON.parse(jsonString);
     const startTag = this._pageSource.match(/<script language(.*?)>/gm)[0];
-    const regex = new RegExp(startTag + '(.*?)</script>', 'gi');
+    const regex = new RegExp(startTag + "(.*?)</script>", "gi");
 
     let match;
-    let script = '';
+    let script = "";
     // 컴시간 웹 페이지 JS 코드 추출
     while ((match = regex.exec(this._pageSource))) {
       script += match[1];
@@ -208,17 +188,17 @@ class Timetable {
     // 데이터 처리 함수명 추출
     const functioName = script
       .match(/function 자료[^\(]*/gm)[0]
-      .replace(/\+s/, '')
-      .replace('function', '');
+      .replace(/\+s/, "")
+      .replace("function", "");
 
     // 학년 별 전체 학급 수
-    const classCount = resultJson['학급수'];
+    const classCount = resultJson["학급수"];
 
     // 시간표 데이터 객체
     const timetableData = {};
 
     // 1학년 ~ maxGrade 학년 교실 반복
-    for (let grade = 1; grade <= this._option['maxGrade']; grade++) {
+    for (let grade = 1; grade <= this._option["maxGrade"]; grade++) {
       if (!timetableData[grade]) {
         timetableData[grade] = {};
       }
@@ -249,37 +229,30 @@ class Timetable {
   async getClassTime() {
     this._isReady();
     // 교시별 시작/종료 시간 데이터
-    return JSON.parse(await this._getData())['일과시간'];
+    return JSON.parse(await this._getData())["일과시간"];
   }
 
   /**
    * 컴시간의 API를 통해 전체 시간표 데이터를 수집/파싱하여 반환합니다.
    */
   async _getData() {
-    const da1 = '0';
+    const da1 = "0";
     const s7 = this._scData[0] + this._schoolCode;
     const sc3 =
-      this._extractCode.split('?')[0] +
-      '?' +
-      Buffer.from(s7 + '_' + da1 + '_' + this._scData[2]).toString('base64');
+      this._extractCode.split("?")[0] +
+      "?" +
+      Buffer.from(s7 + "_" + da1 + "_" + this._scData[2]).toString("base64");
 
     // JSON 데이터 로드
-    const jsonString = await new Promise((resolve, reject) => {
-      request(this._baseUrl + sc3, (err, _ㄴres, body) => {
-        if (err) {
-          reject(err);
-        }
+    const response = await axios.get(this._baseUrl + sc3);
+    const body = response.data;
 
-        if (!body) {
-          reject(new Error('시간표 데이터를 찾을 수 없습니다.'));
-        }
+    if (!body) {
+      throw new Error("시간표 데이터를 찾을 수 없습니다.");
+    }
 
-        // String to JSON
-        resolve(body.substr(0, body.lastIndexOf('}') + 1));
-      });
-    });
-
-    return jsonString;
+    // String to JSON
+    return body.substr(0, body.lastIndexOf("}") + 1);
   }
 
   /**
@@ -292,8 +265,8 @@ class Timetable {
    */
   _getClassTimetable(codeConfig, grade, classNumber) {
     const args = [codeConfig.data, grade, classNumber];
-    const call = codeConfig.functioName + '(' + args.join(',') + ')';
-    const script = codeConfig.script + '\n\n' + call;
+    const call = codeConfig.functioName + "(" + args.join(",") + ")";
+    const script = codeConfig.script + "\n\n" + call;
 
     /** DEAD: Sorry about using eval() **/
     const res = eval(script);
@@ -302,13 +275,13 @@ class Timetable {
     const $ = cheerio.load(res);
     const $this = this;
     const timetable = [];
-    $('tr').each(function (timeIdx) {
+    $("tr").each(function (timeIdx) {
       const currentTime = timeIdx - 2;
       // 1, 2번째 tr은 제목 영역이므로 스킵
       if (timeIdx <= 1) return;
 
       $(this)
-        .find('td')
+        .find("td")
         .each(function (weekDayIdx) {
           const currentWeekDay = weekDayIdx - 1;
           // 처음(제목)과 끝(토요일) 영역은 스킵
@@ -340,11 +313,11 @@ class Timetable {
    */
   _isReady() {
     if (!this._initialized) {
-      throw new Error('초기화가 진행되지 않았습니다.');
+      throw new Error("초기화가 진행되지 않았습니다.");
     }
 
     if (this._schoolCode === -1) {
-      throw new Error('학교 설정이 진행되지 않았습니다.');
+      throw new Error("학교 설정이 진행되지 않았습니다.");
     }
   }
 
