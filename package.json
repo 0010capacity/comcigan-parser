@@ -1,11 +1,11 @@
 {
   "name": "comcigan-parser",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Parse timetable data from comcigan.com",
   "main": "index.js",
   "scripts": {
     "test": "node ./sample/sample.js",
-    "standard": "standard && node my-tests.js"
+    "lint": "eslint index.js"
   },
   "repository": {
     "type": "git",
@@ -22,12 +22,25 @@
     "url": "https://github.com/leegeunhyeok/comcigan-parser/issues"
   },
   "homepage": "https://github.com/leegeunhyeok/comcigan-parser#readme",
+  "eslintConfig": {
+    "env": {
+      "node": true,
+      "es6": true
+    },
+    "parserOptions": {
+      "ecmaVersion": 2022,
+      "sourceType": "module"
+    },
+    "rules": {
+      "no-console": "off"
+    }
+  },
   "dependencies": {
-    "cheerio": "^1.0.0-rc.5",
-    "iconv-lite": "^0.4.24",
-    "request": "^2.88.0"
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "iconv-lite": "^0.6.3"
   },
   "devDependencies": {
-    "standard": "^12.0.1"
+    "eslint": "^8.0.0"
   }
 }

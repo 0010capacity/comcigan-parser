@@ -4,7 +4,7 @@
 본 라이브러리는 [컴시간](http://컴시간학생.kr) 홈페이지에서 등록된 학교의 **시간표** 데이터를 파싱하여 제공합니다.
 
 [![health](https://img.shields.io/github/workflow/status/leegeunhyeok/comcigan-parser/health/master?label=health&style=flat-square)](https://github.com/leegeunhyeok/comcigan-parser/actions?query=workflow%3A"health")
-[![npm version](https://img.shields.io/npm/v/comcigan-parser?style=flat-square)](https://www.npmjs.com/package/comcigan-parser)
+[![npm version](https://img.shields.io/npm/v/comcigan-parser/2.0.0?style=flat-square)](https://www.npmjs.com/package/comcigan-parser)
 [![npm](https://img.shields.io/npm/dt/comcigan-parser.svg?style=flat-square)](https://www.npmjs.com/package/comcigan-parser)
 [![npm license](https://img.shields.io/npm/l/comcigan-parser?style=flat-square)](LICENSE)
 
@@ -397,6 +397,11 @@ timetable.getTimetable().then((result) => {
 
 ## 변경사항
 
+- `2.0.0`
+  - 의존성 현대화: `request` 모듈 → `axios` (request는 deprecated됨)
+  - 코드 품질 개선 및 최신 Node.js 호환성 강화
+  - 에러 처리 개선
+  - 보안 패키지 업데이트
 - `1.0.0`
   - 학교 검색과 설정 기능을 분리
   - 학교 설정 방식 변경 (자세한 사항은 [여기](#학교-설정) 참조)
