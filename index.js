@@ -199,6 +199,11 @@ class Timetable {
 
     // 1학년 ~ maxGrade 학년 교실 반복
     for (let grade = 1; grade <= this._option["maxGrade"]; grade++) {
+      // 해당 학년의 학급수 데이터가 없으면 건너뜀 (중학교의 3학년 등)
+      if (!classCount || classCount[grade] === undefined) {
+        continue;
+      }
+
       if (!timetableData[grade]) {
         timetableData[grade] = {};
       }
